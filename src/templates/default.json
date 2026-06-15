@@ -157,10 +157,10 @@
       "field": "customerName",
       "fieldKey": "customer_name",
       "page": 3,
-      "x": 112.5,
-      "y": 478,
-      "width": 93.34,
-      "height": 24,
+      "x": 140,
+      "y": 482,
+      "width": 58,
+      "height": 16,
       "unit": "pdf_point"
     }
   ]
