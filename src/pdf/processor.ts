@@ -1,9 +1,13 @@
-import { degrees, PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { degrees, PDFDocument, PDFImage, rgb, StandardFonts } from "pdf-lib";
 import defaultTemplate from "../templates/default.json";
 import type { FormValues, PdfTemplate, ProcessingOptions, ProcessedPdf, TemplatePosition } from "../types";
 import { createRandomSignatureStyle, createSignaturePng } from "./signature";
 
 export const templates: PdfTemplate[] = [defaultTemplate as PdfTemplate];
+
+type PdfPage = ReturnType<PDFDocument["getPage"]>;
+
+const checkManifestUrl = `${import.meta.env.BASE_URL}assets/checks/manifest.json`;
 
 function sanitizeFilenamePart(value: string): string {
   return (value || "unknown")
@@ -26,7 +30,33 @@ function jitter(enabled: boolean, amount: number): number {
   return enabled ? Math.random() * amount * 2 - amount : 0;
 }
 
-function drawCheck(page: ReturnType<PDFDocument["getPage"]>, position: TemplatePosition, randomStyle: boolean) {
+function pickRandom<T>(items: T[]): T | null {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+async function loadCheckImages(pdfDoc: PDFDocument): Promise<PDFImage[]> {
+  try {
+    const manifestResponse = await fetch(checkManifestUrl);
+    if (!manifestResponse.ok) return [];
+
+    const filenames = (await manifestResponse.json()) as string[];
+    const images = await Promise.all(
+      filenames.map(async (filename) => {
+        const assetResponse = await fetch(`${import.meta.env.BASE_URL}assets/checks/${filename}`);
+        if (!assetResponse.ok) return null;
+        const bytes = await assetResponse.arrayBuffer();
+        return pdfDoc.embedPng(bytes);
+      }),
+    );
+
+    return images.filter((image): image is PDFImage => Boolean(image));
+  } catch {
+    return [];
+  }
+}
+
+function drawVectorCheck(page: PdfPage, position: TemplatePosition, randomStyle: boolean) {
   const x = position.x + jitter(randomStyle, 1.5);
   const y = position.y + jitter(randomStyle, 1.5);
   const color = rgb(0.02, 0.25, 0.2);
@@ -46,48 +76,84 @@ function drawCheck(page: ReturnType<PDFDocument["getPage"]>, position: TemplateP
   });
 }
 
+function drawCheck(page: PdfPage, position: TemplatePosition, checkImages: PDFImage[], randomStyle: boolean) {
+  const image = pickRandom(checkImages);
+  if (!image) {
+    drawVectorCheck(page, position, randomStyle);
+    return;
+  }
+
+  page.drawImage(image, {
+    x: position.x + jitter(randomStyle, 1.5),
+    y: position.y + jitter(randomStyle, 1.5),
+    width: position.width * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
+    height: position.height * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
+    opacity: randomStyle ? 0.82 + Math.random() * 0.16 : 0.95,
+    rotate: degrees(randomStyle ? jitter(true, 4) : 0),
+  });
+}
+
+function resolvePageIndexes(template: PdfTemplate, pageCount: number, position: TemplatePosition): number[] {
+  const firstPageIndex = position.page - 1;
+  if (!template.groupPageCount || template.groupPageCount <= 0) {
+    return firstPageIndex >= 0 && firstPageIndex < pageCount ? [firstPageIndex] : [];
+  }
+
+  const indexes: number[] = [];
+  for (let offset = 0; offset < pageCount; offset += template.groupPageCount) {
+    const pageIndex = firstPageIndex + offset;
+    if (pageIndex >= 0 && pageIndex < pageCount) indexes.push(pageIndex);
+  }
+  return indexes;
+}
+
 export async function processPdfInBrowser(file: File, template: PdfTemplate, values: FormValues, options: ProcessingOptions): Promise<ProcessedPdf> {
   const inputBytes = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.load(inputBytes);
+  const pageCount = pdfDoc.getPageCount();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const checkImages = options.insertChecks ? await loadCheckImages(pdfDoc) : [];
   const signatureStyle = createRandomSignatureStyle(options.randomStyle);
   const signaturePngBytes = options.generateSignature ? await createSignaturePng(values.customerName, signatureStyle) : null;
   const signatureImage = signaturePngBytes ? await pdfDoc.embedPng(signaturePngBytes) : null;
 
   for (const position of template.positions) {
-    const pageIndex = position.page - 1;
-    if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
-    const page = pdfDoc.getPage(pageIndex);
-    const x = position.x + jitter(options.randomStyle, 1.2);
-    const y = position.y + jitter(options.randomStyle, 1.2);
+    if (position.type === "extract_text") continue;
 
-    if (position.type === "check" && options.insertChecks) {
-      drawCheck(page, position, options.randomStyle);
-      continue;
-    }
+    const pageIndexes = resolvePageIndexes(template, pageCount, position);
+    for (const pageIndex of pageIndexes) {
+      const page = pdfDoc.getPage(pageIndex);
+      const x = position.x + jitter(options.randomStyle, 1.2);
+      const y = position.y + jitter(options.randomStyle, 1.2);
 
-    if (position.type === "signature" && options.generateSignature && signatureImage) {
-      page.drawImage(signatureImage, {
-        x,
-        y,
-        width: position.width * signatureStyle.scale,
-        height: position.height * signatureStyle.scale,
-        opacity: signatureStyle.opacity,
-        rotate: degrees(options.randomStyle ? signatureStyle.rotation : 0),
-      });
-      continue;
-    }
+      if (position.type === "check" && options.insertChecks) {
+        drawCheck(page, position, checkImages, options.randomStyle);
+        continue;
+      }
 
-    if (position.type === "name" || position.type === "date") {
-      page.drawText(fieldValue(position, values), {
-        x,
-        y,
-        size: position.type === "name" ? 12 : 10,
-        font: position.type === "name" ? boldFont : font,
-        color: rgb(0.05, 0.08, 0.1),
-        opacity: options.randomStyle ? 0.9 + Math.random() * 0.1 : 1,
-      });
+      if (position.type === "signature" && options.generateSignature && signatureImage) {
+        page.drawImage(signatureImage, {
+          x,
+          y,
+          width: position.width * signatureStyle.scale,
+          height: position.height * signatureStyle.scale,
+          opacity: signatureStyle.opacity,
+          rotate: degrees(options.randomStyle ? signatureStyle.rotation : 0),
+        });
+        continue;
+      }
+
+      if (position.type === "name" || position.type === "date") {
+        page.drawText(fieldValue(position, values), {
+          x,
+          y,
+          size: position.type === "name" ? 12 : 10,
+          font: position.type === "name" ? boldFont : font,
+          color: rgb(0.05, 0.08, 0.1),
+          opacity: options.randomStyle ? 0.9 + Math.random() * 0.1 : 1,
+        });
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-export type TemplatePositionType = "check" | "name" | "date" | "signature";
+export type TemplatePositionType = "check" | "name" | "date" | "signature" | "extract_text";
 
 export type TemplateField = "customerName" | "managerName" | "managerCode" | "date";
 
@@ -6,17 +6,21 @@ export type TemplatePosition = {
   id: string;
   type: TemplatePositionType;
   field?: TemplateField;
+  fieldKey?: string;
   page: number;
   x: number;
   y: number;
   width: number;
   height: number;
+  unit?: "pdf_point";
+  sourceType?: string;
 };
 
 export type PdfTemplate = {
   id: string;
   name: string;
   description: string;
+  groupPageCount?: number;
   positions: TemplatePosition[];
 };
 
