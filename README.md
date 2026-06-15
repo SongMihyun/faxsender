@@ -106,3 +106,42 @@ npm run build
 - 자모 조합 기반 손글씨 서명 엔진
 - 여러 페이지/여러 사람 일괄 처리
 - 다운로드 전 PDF 품질 옵션
+
+## GitHub Pages 배포 요약
+
+이 저장소는 GitHub Pages 배포를 위해 `vite.config.ts`의 `base`를 `/faxsender/`로 유지합니다.
+
+배포 URL:
+
+```text
+https://songmihyun.github.io/faxsender/
+```
+
+로컬 실행:
+
+```powershell
+npm install
+npm run dev
+```
+
+빌드:
+
+```powershell
+npm run build
+```
+
+GitHub Pages 배포:
+
+1. GitHub 저장소 `SongMihyun/faxsender`의 `Settings > Pages`로 이동합니다.
+2. `Build and deployment > Source`를 `GitHub Actions`로 설정합니다.
+3. `main` 브랜치에 push하면 `.github/workflows/deploy.yml` workflow가 실행됩니다.
+4. workflow는 `npm ci`, `npm run build`, `dist` artifact 업로드, Pages 배포 순서로 진행됩니다.
+
+배포 전 체크리스트:
+
+- `vite.config.ts`의 `base`가 `/faxsender/`인지 확인
+- `package.json`에 `build` script가 있는지 확인
+- `npm run build`가 성공하는지 확인
+- GitHub Pages Source가 `GitHub Actions`인지 확인
+- 배포 후 `https://songmihyun.github.io/faxsender/` 접속 확인
+- 샘플 PDF 업로드, 합성 미리보기, 다운로드 확인
