@@ -30,10 +30,10 @@ function normalizeText(value: string): string {
 }
 
 function cleanCustomerName(value: string): string {
-  return normalizeText(value)
-    .replace(/^\(?\s*/, "")
-    .replace(/\s*\)?$/, "")
-    .replace(/님$/, "")
+  const cleaned = normalizeText(value).replace(/님$/, "").trim();
+  const nameMatch = cleaned.match(/[가-힣A-Za-z]{2,20}/);
+  return (nameMatch?.[0] ?? cleaned)
+    .replace(/[()]/g, "")
     .trim();
 }
 
