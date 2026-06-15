@@ -157,6 +157,11 @@ input {
   opacity: 0.65;
 }
 
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .selected-file {
   margin: 14px 0 0;
   color: #29434d;
@@ -268,6 +273,15 @@ input {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
+}
+
+.save-message {
+  margin: -4px 0 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: #07594f;
+  background: #e6f7ef;
+  font-weight: 800;
 }
 
 .preview-panel {

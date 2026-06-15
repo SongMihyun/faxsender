@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PdfPreview } from "./components/PdfPreview";
-import { createOutputFilename, processPdfInBrowser, templates } from "./pdf/processor";
+import { saveProcessedPdf } from "./pdf/fileSave";
+import { processPdfInBrowser, templates } from "./pdf/processor";
 import type { FormValues, ProcessedPdf, ProcessingOptions } from "./types";
 import "./styles.css";
 
@@ -57,9 +58,9 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
 
-  const values = useMemo(() => inferValues(file), [file]);
-  const outputFilename = createOutputFilename(values);
   const selectedTemplate = templates[0];
 
   useEffect(() => {
@@ -78,12 +79,15 @@ function App() {
     setResult(null);
     setSteps(initialSteps);
     setMessage("");
+    setSaveMessage("");
     setIsProcessing(false);
+    setIsSaving(false);
   }
 
   async function runProcess(nextFile: File) {
     setIsProcessing(true);
     setMessage("");
+    setSaveMessage("");
     setSteps(initialSteps);
     setResult(null);
 
@@ -126,6 +130,20 @@ function App() {
     if (result?.blobUrl) URL.revokeObjectURL(result.blobUrl);
     setFile(nextFile);
     void runProcess(nextFile);
+  }
+
+  async function savePdf(forcePickDirectory = false) {
+    if (!result) return;
+    setIsSaving(true);
+    setSaveMessage("");
+    try {
+      const nextMessage = await saveProcessedPdf(result, forcePickDirectory);
+      setSaveMessage(nextMessage);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "PDF 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -201,9 +219,12 @@ function App() {
               <p>브라우저에서 합성한 결과 PDF입니다.</p>
             </div>
             <div className="result-actions">
-              <a className="primary-button" href={result.blobUrl} download={result.filename || outputFilename}>
+              <button className="primary-button" type="button" onClick={() => void savePdf(false)} disabled={isSaving}>
                 PDF로 저장하기
-              </a>
+              </button>
+              <button className="subtle-button" type="button" onClick={() => void savePdf(true)} disabled={isSaving}>
+                저장 위치 변경
+              </button>
               <button className="subtle-button" type="button" onClick={() => window.alert("팩스 발송 기능은 로컬 백엔드 버전에서 지원됩니다.")}>
                 팩스 발송
               </button>
@@ -212,6 +233,7 @@ function App() {
               </button>
             </div>
           </div>
+          {saveMessage && <p className="save-message">{saveMessage}</p>}
           <PdfPreview title="최종 완성본" bytes={result.bytes} emptyText="PDF 처리 후 결과가 표시됩니다." />
         </section>
       )}
