@@ -31,8 +31,12 @@ function normalizeText(value: string): string {
 
 function cleanCustomerName(value: string): string {
   const cleaned = normalizeText(value).replace(/님$/, "").trim();
-  const nameMatch = cleaned.match(/[가-힣A-Za-z]{2,20}/);
-  return (nameMatch?.[0] ?? cleaned)
+  const blockedLabels = new Set(["성명", "서명", "서명날인", "동의자", "구분", "동의일자", "경우", "본인은"]);
+  const candidates = cleaned
+    .match(/[가-힣A-Za-z]{2,20}/g)
+    ?.map((candidate) => candidate.replace(/[()]/g, "").trim())
+    .filter((candidate) => candidate && !blockedLabels.has(candidate) && !candidate.includes("서명")) ?? [];
+  return (candidates[0] ?? cleaned)
     .replace(/[()]/g, "")
     .trim();
 }
