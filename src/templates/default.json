@@ -2,6 +2,7 @@
   "id": "meritz-consent",
   "name": "메리츠_고객동의",
   "description": "로컬 관리자 템플릿에서 추출한 고객동의서 3장 좌표입니다.",
+  "coordinateOrigin": "top_left",
   "groupPageCount": 3,
   "positions": [
     {

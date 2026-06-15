@@ -30,6 +30,16 @@ function jitter(enabled: boolean, amount: number): number {
   return enabled ? Math.random() * amount * 2 - amount : 0;
 }
 
+function positionOnPage(page: PdfPage, template: PdfTemplate, position: TemplatePosition, randomStyle: boolean) {
+  const x = position.x + jitter(randomStyle, 1.2);
+  const baseY =
+    template.coordinateOrigin === "top_left"
+      ? page.getHeight() - position.y - position.height
+      : position.y;
+  const y = baseY + jitter(randomStyle, 1.2);
+  return { x, y };
+}
+
 function pickRandom<T>(items: T[]): T | null {
   if (items.length === 0) return null;
   return items[Math.floor(Math.random() * items.length)];
@@ -56,9 +66,8 @@ async function loadCheckImages(pdfDoc: PDFDocument): Promise<PDFImage[]> {
   }
 }
 
-function drawVectorCheck(page: PdfPage, position: TemplatePosition, randomStyle: boolean) {
-  const x = position.x + jitter(randomStyle, 1.5);
-  const y = position.y + jitter(randomStyle, 1.5);
+function drawVectorCheck(page: PdfPage, template: PdfTemplate, position: TemplatePosition, randomStyle: boolean) {
+  const { x, y } = positionOnPage(page, template, position, randomStyle);
   const color = rgb(0.02, 0.25, 0.2);
   const thickness = randomStyle ? 2.2 + Math.random() * 1.4 : 2.8;
 
@@ -76,16 +85,17 @@ function drawVectorCheck(page: PdfPage, position: TemplatePosition, randomStyle:
   });
 }
 
-function drawCheck(page: PdfPage, position: TemplatePosition, checkImages: PDFImage[], randomStyle: boolean) {
+function drawCheck(page: PdfPage, template: PdfTemplate, position: TemplatePosition, checkImages: PDFImage[], randomStyle: boolean) {
   const image = pickRandom(checkImages);
   if (!image) {
-    drawVectorCheck(page, position, randomStyle);
+    drawVectorCheck(page, template, position, randomStyle);
     return;
   }
+  const { x, y } = positionOnPage(page, template, position, randomStyle);
 
   page.drawImage(image, {
-    x: position.x + jitter(randomStyle, 1.5),
-    y: position.y + jitter(randomStyle, 1.5),
+    x,
+    y,
     width: position.width * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
     height: position.height * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
     opacity: randomStyle ? 0.82 + Math.random() * 0.16 : 0.95,
@@ -124,11 +134,10 @@ export async function processPdfInBrowser(file: File, template: PdfTemplate, val
     const pageIndexes = resolvePageIndexes(template, pageCount, position);
     for (const pageIndex of pageIndexes) {
       const page = pdfDoc.getPage(pageIndex);
-      const x = position.x + jitter(options.randomStyle, 1.2);
-      const y = position.y + jitter(options.randomStyle, 1.2);
+      const { x, y } = positionOnPage(page, template, position, options.randomStyle);
 
       if (position.type === "check" && options.insertChecks) {
-        drawCheck(page, position, checkImages, options.randomStyle);
+        drawCheck(page, template, position, checkImages, options.randomStyle);
         continue;
       }
 

@@ -20,6 +20,7 @@ export type PdfTemplate = {
   id: string;
   name: string;
   description: string;
+  coordinateOrigin?: "top_left" | "bottom_left";
   groupPageCount?: number;
   positions: TemplatePosition[];
 };

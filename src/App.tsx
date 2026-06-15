@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PdfPreview } from "./components/PdfPreview";
+import { extractFormValuesFromPdf } from "./pdf/extractFields";
 import { saveProcessedPdf } from "./pdf/fileSave";
 import { processPdfInBrowser, templates } from "./pdf/processor";
 import type { FormValues, ProcessedPdf, ProcessingOptions } from "./types";
@@ -92,6 +93,8 @@ function App() {
     setResult(null);
 
     try {
+      let extractedValues = inferValues(nextFile);
+
       for (let index = 0; index < initialSteps.length; index += 1) {
         setStepStatus(index, "running");
         await delay(index === initialSteps.length - 1 ? 180 : 120);
@@ -100,10 +103,14 @@ function App() {
           throw new Error("GitHub Pages 버전은 서버 변환이 없어 PDF만 처리할 수 있습니다.");
         }
 
+        if (index === 2) {
+          extractedValues = await extractFormValuesFromPdf(nextFile, selectedTemplate, extractedValues);
+        }
+
         setStepStatus(index, "done");
       }
 
-      const processed = await processPdfInBrowser(nextFile, selectedTemplate, inferValues(nextFile), options);
+      const processed = await processPdfInBrowser(nextFile, selectedTemplate, extractedValues, options);
       setResult(processed);
       setMessage("최종 PDF 생성이 완료되었습니다.");
     } catch (error) {
