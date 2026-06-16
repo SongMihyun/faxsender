@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { PdfPreview } from "./components/PdfPreview";
 import { extractBatchFormValuesFromPdf } from "./pdf/extractFields";
-import { chooseSaveDirectory, openSaveDirectory, saveProcessedPdf } from "./pdf/fileSave";
+import { chooseSaveDirectory, saveProcessedPdf } from "./pdf/fileSave";
 import { processPdfInBrowser, templates } from "./pdf/processor";
 import type { FormValues, ProcessedPdf, ProcessingOptions } from "./types";
 import "./styles.css";
@@ -100,7 +100,7 @@ function App() {
         await delay(index === initialSteps.length - 1 ? 180 : 120);
 
         if (index === 1 && nextFile.name.toLowerCase().endsWith(".ozd")) {
-          throw new Error("GitHub Pages 버전은 서버 변환이 없어 PDF만 처리할 수 있습니다.");
+          throw new Error("GitHub Pages 버전은 서버 변환 기능이 없어 PDF만 처리할 수 있습니다.");
         }
 
         if (index === 2) {
@@ -165,18 +165,6 @@ function App() {
     }
   }
 
-  async function openDirectory() {
-    setIsSaving(true);
-    setSaveMessage("");
-    try {
-      setSaveMessage(await openSaveDirectory());
-    } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "저장 폴더를 여는 중 오류가 발생했습니다.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
   return (
     <main className="fax-page">
       <header className="fax-title">
@@ -212,7 +200,7 @@ function App() {
         >
           <input type="file" accept=".ozd,.pdf,application/pdf" onChange={(event) => acceptFile(event.target.files?.[0])} />
           <span className="upload-symbol" aria-hidden="true">
-            ⇧
+            ↥
           </span>
           <strong>OZD/PDF 파일을 여기에 끌어오거나 선택하세요.</strong>
           <span>허용 확장자: .ozd, .pdf</span>
@@ -248,9 +236,6 @@ function App() {
             <div>
               <div className="result-title-row">
                 <h2>최종 완성본 미리보기</h2>
-                <button className="inline-button" type="button" onClick={() => void changeSaveDirectory()} disabled={isSaving}>
-                  저장 위치 변경
-                </button>
               </div>
               <p>브라우저에서 합성한 결과 PDF입니다.</p>
             </div>
@@ -258,8 +243,8 @@ function App() {
               <button className="primary-button" type="button" onClick={() => void savePdf()} disabled={isSaving}>
                 PDF로 저장하기
               </button>
-              <button className="subtle-button" type="button" onClick={() => void openDirectory()} disabled={isSaving}>
-                저장폴더 열기
+              <button className="subtle-button" type="button" onClick={() => void changeSaveDirectory()} disabled={isSaving}>
+                저장 위치 변경
               </button>
             </div>
           </div>
