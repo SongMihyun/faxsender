@@ -20,7 +20,7 @@ type SaveFileHandle = {
 };
 
 type WindowWithDirectoryPicker = Window & {
-  showDirectoryPicker?: () => Promise<DirectoryHandle>;
+  showDirectoryPicker?: (options?: { startIn?: DirectoryHandle | "desktop" | "documents" | "downloads" }) => Promise<DirectoryHandle>;
   showSaveFilePicker?: (options: {
     suggestedName: string;
     types: Array<{
@@ -102,10 +102,10 @@ async function ensureWritePermission(handle: DirectoryHandle): Promise<boolean> 
   return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
 }
 
-async function pickDirectory(): Promise<DirectoryHandle | null> {
+async function pickDirectory(startIn?: DirectoryHandle): Promise<DirectoryHandle | null> {
   const picker = (window as WindowWithDirectoryPicker).showDirectoryPicker;
   if (!picker) return null;
-  const handle = await picker();
+  const handle = await picker(startIn ? { startIn } : undefined);
   await storeDirectoryHandle(handle);
   return handle;
 }
@@ -154,7 +154,17 @@ export async function openSaveDirectory(): Promise<string> {
     return "저장 폴더를 선택하지 않았습니다.";
   }
 
-  return `${directoryHandle.name} 폴더가 저장 위치로 설정되어 있습니다.`;
+  let openedHandle: DirectoryHandle | null = null;
+  try {
+    openedHandle = await pickDirectory(directoryHandle);
+  } catch {
+    openedHandle = await pickDirectory();
+  }
+  if (!openedHandle) {
+    return `${directoryHandle.name} 폴더가 저장 위치로 설정되어 있습니다.`;
+  }
+
+  return `${openedHandle.name} 폴더를 저장 위치로 선택했습니다.`;
 }
 
 export async function saveProcessedPdf(result: ProcessedPdf): Promise<string> {
