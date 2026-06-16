@@ -83,11 +83,11 @@ export function PdfPreview({ title, file, bytes, emptyText }: PdfPreviewProps) {
               처음
             </button>
             <button type="button" onClick={() => setPageNumber((value) => Math.max(1, value - 1))} disabled={pageNumber <= 1}>
-              이전
+              &lt;
             </button>
             <span>{pageNumber} / {pageCount}</span>
             <button type="button" onClick={() => setPageNumber((value) => Math.min(pageCount, value + 1))} disabled={pageNumber >= pageCount}>
-              다음
+              &gt;
             </button>
             <button type="button" onClick={() => setPageNumber(pageCount)} disabled={pageNumber >= pageCount}>
               끝

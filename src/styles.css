@@ -275,6 +275,32 @@ input {
   justify-content: flex-end;
 }
 
+.result-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  color: #14343c;
+  background: #e9f0f2;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inline-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .save-message {
   margin: -4px 0 14px;
   padding: 12px 14px;
@@ -319,6 +345,7 @@ input {
 
 .page-controls button {
   min-height: 34px;
+  min-width: 42px;
   padding: 0 12px;
   border: 0;
   border-radius: 6px;

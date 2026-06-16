@@ -136,7 +136,34 @@ async function savePdfWithFilePicker(result: ProcessedPdf): Promise<string | nul
   return `${result.filename} 저장을 완료했습니다.`;
 }
 
-export async function saveProcessedPdf(result: ProcessedPdf, forcePickDirectory = false): Promise<string> {
+export async function chooseSaveDirectory(): Promise<string> {
+  const directoryHandle = await pickDirectory();
+  if (!directoryHandle) {
+    return "저장 폴더를 선택하지 않았습니다.";
+  }
+  return `${directoryHandle.name} 폴더를 저장 위치로 선택했습니다.`;
+}
+
+export async function openSaveDirectory(): Promise<string> {
+  let directoryHandle = await getStoredDirectoryHandle();
+  if (!directoryHandle || !(await ensureWritePermission(directoryHandle))) {
+    directoryHandle = await pickDirectory();
+  }
+
+  if (!directoryHandle) {
+    return "저장 폴더를 선택하지 않았습니다.";
+  }
+
+  return `${directoryHandle.name} 폴더가 저장 위치로 설정되어 있습니다.`;
+}
+
+export async function saveProcessedPdf(result: ProcessedPdf): Promise<string> {
+  const directoryHandle = await getStoredDirectoryHandle();
+  if (directoryHandle && (await ensureWritePermission(directoryHandle))) {
+    await writePdfToDirectory(directoryHandle, result);
+    return `${directoryHandle.name} 폴더에 ${result.filename} 저장을 완료했습니다.`;
+  }
+
   const pickerMessage = await savePdfWithFilePicker(result);
   if (pickerMessage) return pickerMessage;
 
@@ -146,16 +173,12 @@ export async function saveProcessedPdf(result: ProcessedPdf, forcePickDirectory 
     return "브라우저가 폴더 직접 저장을 지원하지 않아 다운로드로 저장했습니다.";
   }
 
-  let directoryHandle = forcePickDirectory ? null : await getStoredDirectoryHandle();
-  if (!directoryHandle || !(await ensureWritePermission(directoryHandle))) {
-    directoryHandle = await pickDirectory();
-  }
-
-  if (!directoryHandle) {
+  const nextDirectoryHandle = await pickDirectory();
+  if (!nextDirectoryHandle) {
     triggerDownload(result);
     return "저장 폴더를 선택하지 않아 다운로드로 저장했습니다.";
   }
 
-  await writePdfToDirectory(directoryHandle, result);
-  return `${directoryHandle.name} 폴더에 ${result.filename} 저장을 완료했습니다.`;
+  await writePdfToDirectory(nextDirectoryHandle, result);
+  return `${nextDirectoryHandle.name} 폴더에 ${result.filename} 저장을 완료했습니다.`;
 }

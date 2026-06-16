@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { PdfPreview } from "./components/PdfPreview";
 import { extractBatchFormValuesFromPdf } from "./pdf/extractFields";
-import { saveProcessedPdf } from "./pdf/fileSave";
+import { chooseSaveDirectory, openSaveDirectory, saveProcessedPdf } from "./pdf/fileSave";
 import { processPdfInBrowser, templates } from "./pdf/processor";
 import type { FormValues, ProcessedPdf, ProcessingOptions } from "./types";
 import "./styles.css";
@@ -139,15 +139,39 @@ function App() {
     void runProcess(nextFile);
   }
 
-  async function savePdf(forcePickDirectory = false) {
+  async function savePdf() {
     if (!result) return;
     setIsSaving(true);
     setSaveMessage("");
     try {
-      const nextMessage = await saveProcessedPdf(result, forcePickDirectory);
+      const nextMessage = await saveProcessedPdf(result);
       setSaveMessage(nextMessage);
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "PDF 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function changeSaveDirectory() {
+    setIsSaving(true);
+    setSaveMessage("");
+    try {
+      setSaveMessage(await chooseSaveDirectory());
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "저장 위치 변경 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function openDirectory() {
+    setIsSaving(true);
+    setSaveMessage("");
+    try {
+      setSaveMessage(await openSaveDirectory());
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "저장 폴더를 여는 중 오류가 발생했습니다.");
     } finally {
       setIsSaving(false);
     }
@@ -222,15 +246,20 @@ function App() {
         <section className="fax-panel result-panel">
           <div className="panel-topline">
             <div>
-              <h2>최종 완성본 미리보기</h2>
+              <div className="result-title-row">
+                <h2>최종 완성본 미리보기</h2>
+                <button className="inline-button" type="button" onClick={() => void changeSaveDirectory()} disabled={isSaving}>
+                  저장 위치 변경
+                </button>
+              </div>
               <p>브라우저에서 합성한 결과 PDF입니다.</p>
             </div>
             <div className="result-actions">
-              <button className="primary-button" type="button" onClick={() => void savePdf(false)} disabled={isSaving}>
+              <button className="primary-button" type="button" onClick={() => void savePdf()} disabled={isSaving}>
                 PDF로 저장하기
               </button>
-              <button className="subtle-button" type="button" onClick={() => void savePdf(true)} disabled={isSaving}>
-                저장 위치 변경
+              <button className="subtle-button" type="button" onClick={() => void openDirectory()} disabled={isSaving}>
+                저장폴더 열기
               </button>
             </div>
           </div>
