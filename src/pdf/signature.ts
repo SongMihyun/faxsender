@@ -64,11 +64,11 @@ const imageCache = new Map<string, Promise<HTMLImageElement>>();
 
 export function createRandomSignatureStyle(enabled: boolean): SignatureStyle {
   if (!enabled) {
-    return { rotation: 0, opacity: 0.92, scale: 1 };
+    return { rotation: 0, opacity: 1, scale: 1 };
   }
   return {
     rotation: Math.random() * 7 - 3.5,
-    opacity: 0.82 + Math.random() * 0.16,
+    opacity: 0.96 + Math.random() * 0.04,
     scale: 0.94 + Math.random() * 0.14,
   };
 }
@@ -169,6 +169,22 @@ function syllableBoxes(medial: string, hasFinal: boolean) {
   return { initial: [8, 14, 50, 94], medial: [52, 14, 60, 98], final: [20, 78, 78, 40] };
 }
 
+function strengthenSignatureInk(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3] < 8) continue;
+    pixels[index] = 0;
+    pixels[index + 1] = 0;
+    pixels[index + 2] = 0;
+    pixels[index + 3] = Math.min(255, pixels[index + 3] * 1.35 + 24);
+  }
+  context.putImageData(imageData, 0, 0);
+}
+
 async function drawSyllable(context: CanvasRenderingContext2D, char: string, x: number, y: number): Promise<boolean> {
   const decomposed = decomposeSyllable(char);
   if (!decomposed) return false;
@@ -218,6 +234,7 @@ async function createJamoSignaturePng(name: string, style: SignatureStyle): Prom
   outputContext.rotate((style.rotation * Math.PI) / 180);
   outputContext.scale(style.scale, style.scale);
   outputContext.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+  strengthenSignatureInk(output);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     output.toBlob((value) => (value ? resolve(value) : reject(new Error("자모 서명 PNG 변환 실패"))), "image/png");
@@ -241,8 +258,8 @@ async function createTextSignaturePng(name: string, style: SignatureStyle): Prom
   context.translate(-canvas.width / 2, -canvas.height / 2);
 
   context.globalAlpha = style.opacity;
-  context.fillStyle = "#101820";
-  context.lineWidth = 2.2;
+  context.fillStyle = "#020608";
+  context.lineWidth = 3;
   context.lineCap = "round";
   context.lineJoin = "round";
   context.font = "96px 'Segoe Script', 'Brush Script MT', 'Malgun Gothic', cursive";
@@ -252,8 +269,9 @@ async function createTextSignaturePng(name: string, style: SignatureStyle): Prom
   context.beginPath();
   context.moveTo(54, 165);
   context.bezierCurveTo(150, 184, 285, 176, 430, 158);
-  context.strokeStyle = "rgba(16, 24, 32, 0.58)";
+  context.strokeStyle = "rgba(2, 6, 8, 0.88)";
   context.stroke();
+  strengthenSignatureInk(canvas);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("서명 PNG 변환 실패"))), "image/png");

@@ -1,11 +1,21 @@
 import { degrees, PDFDocument, PDFImage, rgb, StandardFonts } from "pdf-lib";
+import * as pdfjs from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import defaultTemplate from "../templates/default.json";
 import type { FormValues, PdfTemplate, ProcessingOptions, ProcessedPdf, TemplatePosition } from "../types";
 import { createRandomSignatureStyle, createSignaturePng } from "./signature";
 
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+
 export const templates: PdfTemplate[] = [defaultTemplate as PdfTemplate];
 
 type PdfPage = ReturnType<PDFDocument["getPage"]>;
+
+type GrayscalePage = {
+  width: number;
+  height: number;
+  pngBytes: ArrayBuffer;
+};
 
 const checkManifestUrl = `${import.meta.env.BASE_URL}assets/checks/manifest.json`;
 
@@ -76,10 +86,87 @@ async function loadCheckImages(pdfDoc: PDFDocument): Promise<PDFImage[]> {
   }
 }
 
+async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<ArrayBuffer> {
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("흑백 PDF 페이지 변환에 실패했습니다."))), "image/png");
+  });
+  return blob.arrayBuffer();
+}
+
+function convertCanvasToFaxGrayscale(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const gray = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+    const faxGray = gray > 238 ? 255 : Math.max(0, Math.min(255, (gray - 18) * 0.82));
+    pixels[index] = faxGray;
+    pixels[index + 1] = faxGray;
+    pixels[index + 2] = faxGray;
+    pixels[index + 3] = 255;
+  }
+  context.putImageData(imageData, 0, 0);
+}
+
+async function renderGrayscalePages(inputBytes: ArrayBuffer): Promise<GrayscalePage[]> {
+  const renderScale = 2;
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(inputBytes.slice(0)) });
+  const sourcePdf = await loadingTask.promise;
+  const pages: GrayscalePage[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= sourcePdf.numPages; pageNumber += 1) {
+      const sourcePage = await sourcePdf.getPage(pageNumber);
+      const viewport = sourcePage.getViewport({ scale: renderScale });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("PDF 페이지를 렌더링할 수 없습니다.");
+
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      await sourcePage.render({ canvasContext: context, viewport }).promise;
+      convertCanvasToFaxGrayscale(canvas);
+
+      pages.push({
+        width: viewport.width / renderScale,
+        height: viewport.height / renderScale,
+        pngBytes: await canvasToPngBytes(canvas),
+      });
+    }
+  } finally {
+    await loadingTask.destroy();
+  }
+
+  return pages;
+}
+
+async function createFaxBasePdf(inputBytes: ArrayBuffer): Promise<PDFDocument> {
+  const grayscalePages = await renderGrayscalePages(inputBytes);
+  const pdfDoc = await PDFDocument.create();
+
+  for (const grayscalePage of grayscalePages) {
+    const page = pdfDoc.addPage([grayscalePage.width, grayscalePage.height]);
+    const image = await pdfDoc.embedPng(grayscalePage.pngBytes);
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: grayscalePage.width,
+      height: grayscalePage.height,
+    });
+  }
+
+  return pdfDoc;
+}
+
 function drawVectorCheck(page: PdfPage, template: PdfTemplate, position: TemplatePosition, randomStyle: boolean) {
   const { x, y } = positionOnPage(page, template, position, randomStyle);
-  const color = rgb(0.02, 0.25, 0.2);
-  const thickness = randomStyle ? 2.2 + Math.random() * 1.4 : 2.8;
+  const color = rgb(0, 0, 0);
+  const thickness = randomStyle ? 3 + Math.random() * 1.4 : 3.4;
 
   page.drawLine({
     start: { x: x + position.width * 0.12, y: y + position.height * 0.52 },
@@ -108,7 +195,7 @@ function drawCheck(page: PdfPage, template: PdfTemplate, position: TemplatePosit
     y,
     width: position.width * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
     height: position.height * (randomStyle ? 0.92 + Math.random() * 0.16 : 1),
-    opacity: randomStyle ? 0.82 + Math.random() * 0.16 : 0.95,
+    opacity: randomStyle ? 0.96 + Math.random() * 0.04 : 1,
     rotate: degrees(randomStyle ? jitter(true, 4) : 0),
   });
 }
@@ -120,7 +207,7 @@ function groupCountForPdf(template: PdfTemplate, pageCount: number): number {
 
 export async function processPdfInBrowser(file: File, template: PdfTemplate, values: FormValues | FormValues[], options: ProcessingOptions): Promise<ProcessedPdf> {
   const inputBytes = await file.arrayBuffer();
-  const pdfDoc = await PDFDocument.load(inputBytes);
+  const pdfDoc = await createFaxBasePdf(inputBytes);
   const pageCount = pdfDoc.getPageCount();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -154,7 +241,7 @@ export async function processPdfInBrowser(file: File, template: PdfTemplate, val
           y,
           width: position.width * signatureStyle.scale,
           height: position.height * signatureStyle.scale,
-          opacity: signatureStyle.opacity,
+          opacity: 1,
           rotate: degrees(options.randomStyle ? signatureStyle.rotation : 0),
         });
         continue;
