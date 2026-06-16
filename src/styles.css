@@ -293,11 +293,27 @@ input {
 }
 
 .preview-panel > .panel-heading {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.preview-panel > .panel-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.preview-panel > .panel-heading p {
+  margin: 4px 0 0;
+  color: #58707a;
 }
 
 .page-controls {
+  align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -309,6 +325,13 @@ input {
   color: #14343c;
   background: #e7eff1;
   font-weight: 800;
+}
+
+.page-controls span {
+  min-width: 74px;
+  color: #29434d;
+  font-weight: 900;
+  text-align: center;
 }
 
 .canvas-frame {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PdfPreview } from "./components/PdfPreview";
-import { extractFormValuesFromPdf } from "./pdf/extractFields";
+import { extractBatchFormValuesFromPdf } from "./pdf/extractFields";
 import { saveProcessedPdf } from "./pdf/fileSave";
 import { processPdfInBrowser, templates } from "./pdf/processor";
 import type { FormValues, ProcessedPdf, ProcessingOptions } from "./types";
@@ -93,7 +93,7 @@ function App() {
     setResult(null);
 
     try {
-      let extractedValues = inferValues(nextFile);
+      let extractedValues = [inferValues(nextFile)];
 
       for (let index = 0; index < initialSteps.length; index += 1) {
         setStepStatus(index, "running");
@@ -104,7 +104,7 @@ function App() {
         }
 
         if (index === 2) {
-          extractedValues = await extractFormValuesFromPdf(nextFile, selectedTemplate, extractedValues);
+          extractedValues = await extractBatchFormValuesFromPdf(nextFile, selectedTemplate, extractedValues[0]);
         }
 
         setStepStatus(index, "done");
@@ -112,7 +112,7 @@ function App() {
 
       const processed = await processPdfInBrowser(nextFile, selectedTemplate, extractedValues, options);
       setResult(processed);
-      setMessage("최종 PDF 생성이 완료되었습니다.");
+      setMessage(`최종 PDF 생성이 완료되었습니다. (${extractedValues.length}명)`);
     } catch (error) {
       setSteps((current) => {
         const runningIndex = current.findIndex((step) => step.status === "running");
@@ -231,12 +231,6 @@ function App() {
               </button>
               <button className="subtle-button" type="button" onClick={() => void savePdf(true)} disabled={isSaving}>
                 저장 위치 변경
-              </button>
-              <button className="subtle-button" type="button" onClick={() => window.alert("팩스 발송 기능은 로컬 백엔드 버전에서 지원됩니다.")}>
-                팩스 발송
-              </button>
-              <button className="subtle-button" type="button" onClick={() => window.alert("카카오톡 발송 기능은 로컬 백엔드 버전에서 지원됩니다.")}>
-                나에게 카톡 발송
               </button>
             </div>
           </div>

@@ -12,8 +12,22 @@ type DirectoryHandle = {
   }>;
 };
 
+type SaveFileHandle = {
+  createWritable: () => Promise<{
+    write: (data: Blob) => Promise<void>;
+    close: () => Promise<void>;
+  }>;
+};
+
 type WindowWithDirectoryPicker = Window & {
   showDirectoryPicker?: () => Promise<DirectoryHandle>;
+  showSaveFilePicker?: (options: {
+    suggestedName: string;
+    types: Array<{
+      description: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<SaveFileHandle>;
 };
 
 const dbName = "faxsender-file-handles";
@@ -103,7 +117,29 @@ async function writePdfToDirectory(handle: DirectoryHandle, result: ProcessedPdf
   await writable.close();
 }
 
+async function savePdfWithFilePicker(result: ProcessedPdf): Promise<string | null> {
+  const picker = (window as WindowWithDirectoryPicker).showSaveFilePicker;
+  if (!picker) return null;
+
+  const fileHandle = await picker({
+    suggestedName: result.filename,
+    types: [
+      {
+        description: "PDF 파일",
+        accept: { "application/pdf": [".pdf"] },
+      },
+    ],
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(createPdfBlob(result.bytes));
+  await writable.close();
+  return `${result.filename} 저장을 완료했습니다.`;
+}
+
 export async function saveProcessedPdf(result: ProcessedPdf, forcePickDirectory = false): Promise<string> {
+  const pickerMessage = await savePdfWithFilePicker(result);
+  if (pickerMessage) return pickerMessage;
+
   const supportsDirectoryPicker = typeof (window as WindowWithDirectoryPicker).showDirectoryPicker === "function";
   if (!supportsDirectoryPicker) {
     triggerDownload(result);

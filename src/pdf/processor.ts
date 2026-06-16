@@ -21,6 +21,16 @@ export function createOutputFilename(values: FormValues): string {
   return `${sanitizeFilenamePart(values.managerCode)}_${sanitizeFilenamePart(values.managerName)}_${sanitizeFilenamePart(values.customerName)}.pdf`;
 }
 
+export function createBatchOutputFilename(valuesList: FormValues[]): string {
+  const first = valuesList[0];
+  if (!first) return createOutputFilename({ customerName: "unknown", managerName: "unknown", managerCode: "unknown", date: "" });
+  if (valuesList.length <= 1) return createOutputFilename(first);
+  return createOutputFilename({
+    ...first,
+    customerName: `${first.customerName}_외${valuesList.length - 1}명`,
+  });
+}
+
 function fieldValue(position: TemplatePosition, values: FormValues): string {
   if (!position.field) return "";
   return values[position.field] ?? "";
@@ -103,36 +113,33 @@ function drawCheck(page: PdfPage, template: PdfTemplate, position: TemplatePosit
   });
 }
 
-function resolvePageIndexes(template: PdfTemplate, pageCount: number, position: TemplatePosition): number[] {
-  const firstPageIndex = position.page - 1;
-  if (!template.groupPageCount || template.groupPageCount <= 0) {
-    return firstPageIndex >= 0 && firstPageIndex < pageCount ? [firstPageIndex] : [];
-  }
-
-  const indexes: number[] = [];
-  for (let offset = 0; offset < pageCount; offset += template.groupPageCount) {
-    const pageIndex = firstPageIndex + offset;
-    if (pageIndex >= 0 && pageIndex < pageCount) indexes.push(pageIndex);
-  }
-  return indexes;
+function groupCountForPdf(template: PdfTemplate, pageCount: number): number {
+  const groupPageCount = Math.max(1, template.groupPageCount ?? pageCount);
+  return Math.max(1, Math.ceil(pageCount / groupPageCount));
 }
 
-export async function processPdfInBrowser(file: File, template: PdfTemplate, values: FormValues, options: ProcessingOptions): Promise<ProcessedPdf> {
+export async function processPdfInBrowser(file: File, template: PdfTemplate, values: FormValues | FormValues[], options: ProcessingOptions): Promise<ProcessedPdf> {
   const inputBytes = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.load(inputBytes);
   const pageCount = pdfDoc.getPageCount();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const checkImages = options.insertChecks ? await loadCheckImages(pdfDoc) : [];
-  const signatureStyle = createRandomSignatureStyle(options.randomStyle);
-  const signaturePngBytes = options.generateSignature ? await createSignaturePng(values.customerName, signatureStyle) : null;
-  const signatureImage = signaturePngBytes ? await pdfDoc.embedPng(signaturePngBytes) : null;
+  const valuesList = Array.isArray(values) ? values : [values];
+  const groupPageCount = Math.max(1, template.groupPageCount ?? pageCount);
+  const groupCount = groupCountForPdf(template, pageCount);
 
-  for (const position of template.positions) {
-    if (position.type === "extract_text") continue;
+  for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
+    const groupValues = valuesList[groupIndex] ?? valuesList[0];
+    const pageOffset = groupIndex * groupPageCount;
+    const signatureStyle = createRandomSignatureStyle(options.randomStyle);
+    const signaturePngBytes = options.generateSignature ? await createSignaturePng(groupValues.customerName, signatureStyle) : null;
+    const signatureImage = signaturePngBytes ? await pdfDoc.embedPng(signaturePngBytes) : null;
 
-    const pageIndexes = resolvePageIndexes(template, pageCount, position);
-    for (const pageIndex of pageIndexes) {
+    for (const position of template.positions) {
+      if (position.type === "extract_text") continue;
+      const pageIndex = position.page - 1 + pageOffset;
+      if (pageIndex < 0 || pageIndex >= pageCount) continue;
       const page = pdfDoc.getPage(pageIndex);
       const { x, y } = positionOnPage(page, template, position, options.randomStyle);
 
@@ -154,7 +161,7 @@ export async function processPdfInBrowser(file: File, template: PdfTemplate, val
       }
 
       if (position.type === "name" || position.type === "date") {
-        page.drawText(fieldValue(position, values), {
+        page.drawText(fieldValue(position, groupValues), {
           x,
           y,
           size: position.type === "name" ? 12 : 10,
@@ -173,6 +180,6 @@ export async function processPdfInBrowser(file: File, template: PdfTemplate, val
   return {
     bytes,
     blobUrl: URL.createObjectURL(blob),
-    filename: createOutputFilename(values),
+    filename: createBatchOutputFilename(valuesList),
   };
 }

@@ -91,33 +91,48 @@ function fieldForPosition(position: TemplatePosition): TemplateField | null {
 }
 
 export async function extractFormValuesFromPdf(file: File, template: PdfTemplate, fallback: FormValues): Promise<FormValues> {
-  if (!file.name.toLowerCase().endsWith(".pdf")) return fallback;
+  const batches = await extractBatchFormValuesFromPdf(file, template, fallback);
+  return batches[0] ?? fallback;
+}
+
+export async function extractBatchFormValuesFromPdf(file: File, template: PdfTemplate, fallback: FormValues): Promise<FormValues[]> {
+  if (!file.name.toLowerCase().endsWith(".pdf")) return [fallback];
 
   try {
     const data = new Uint8Array(await file.arrayBuffer());
     const pdf = await pdfjs.getDocument({ data }).promise;
-    const extracted: ExtractedValues = {};
     const extractPositions = template.positions.filter((position) => position.type === "extract_text");
+    const groupPageCount = Math.max(1, template.groupPageCount ?? pdf.numPages);
+    const groupCount = Math.max(1, Math.ceil(pdf.numPages / groupPageCount));
+    const batches: FormValues[] = [];
 
-    for (const position of extractPositions) {
-      const field = fieldForPosition(position);
-      if (!field || position.page < 1 || position.page > pdf.numPages) continue;
+    for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
+      const extracted: ExtractedValues = {};
+      const pageOffset = groupIndex * groupPageCount;
 
-      const page = await pdf.getPage(position.page);
-      const viewport = page.getViewport({ scale: 1 });
-      const textContent = await page.getTextContent();
-      const textItems = (textContent.items as unknown[]).filter(isTextItem);
-      const rawText = textItems
-        .filter((item) => textItemIntersectsPosition(item, position, viewport))
-        .map((item) => item.str)
-        .join(" ");
+      for (const position of extractPositions) {
+        const field = fieldForPosition(position);
+        const targetPage = position.page + pageOffset;
+        if (!field || targetPage < 1 || targetPage > pdf.numPages) continue;
 
-      const nextValue = normalizeExtractedField(field, rawText, fallback[field]);
-      if (nextValue) extracted[field] = nextValue;
+        const page = await pdf.getPage(targetPage);
+        const viewport = page.getViewport({ scale: 1 });
+        const textContent = await page.getTextContent();
+        const textItems = (textContent.items as unknown[]).filter(isTextItem);
+        const rawText = textItems
+          .filter((item) => textItemIntersectsPosition(item, position, viewport))
+          .map((item) => item.str)
+          .join(" ");
+
+        const nextValue = normalizeExtractedField(field, rawText, fallback[field]);
+        if (nextValue) extracted[field] = nextValue;
+      }
+
+      batches.push({ ...fallback, ...extracted });
     }
 
-    return { ...fallback, ...extracted };
+    return batches;
   } catch {
-    return fallback;
+    return [fallback];
   }
 }
